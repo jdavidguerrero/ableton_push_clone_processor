@@ -5,8 +5,8 @@
 
 namespace {
 constexpr unsigned long HEARTBEAT_INTERVAL_MS = 1000;
-constexpr unsigned long GUI_PING_INTERVAL_MS = 5000;
-constexpr unsigned long GUI_TIMEOUT_MS = 15000;
+constexpr unsigned long GUI_PING_INTERVAL_MS = 3000;
+constexpr unsigned long GUI_TIMEOUT_MS = GUI_PING_INTERVAL_MS * 3;
 constexpr unsigned long GUI_HANDSHAKE_RETRY_MS = 2000;
 const uint8_t GUI_HANDSHAKE_PAYLOAD[] = {
     'P','U','S','H','C','L','O','N','E','_','G','U','I'
@@ -48,6 +48,7 @@ void GUIInterface::update() {
             lastPingMs = now;
         }
         if (lastPongMs != 0 && (now - lastPongMs) > GUI_TIMEOUT_MS) {
+            Serial.println("GUIInterface: Ping timeout tras 3 intentos sin respuesta");
             sendDisconnectEvent();
             guiConnected = false;
             handshakePending = false;
@@ -156,28 +157,25 @@ void GUIInterface::sendBinary(uint8_t cmd, const uint8_t* payload, uint8_t len) 
     if (written > 0) {
         io->write(buffer, written);
         io->flush();
-        Serial.print("GUI TX ");
-        Serial.print(commandName(cmd));
-        Serial.print(" (0x");
-        Serial.print(cmd, HEX);
-        Serial.print(") len=");
-        Serial.print(len);
-        if (cmd == CMD_PING) {
-            Serial.print(" [t=");
-            Serial.print(millis());
-            Serial.print("ms]");
+        if (cmd != CMD_PING) {
+            Serial.print("GUI TX ");
+            Serial.print(commandName(cmd));
+            Serial.print(" (0x");
+            Serial.print(cmd, HEX);
+            Serial.print(") len=");
+            Serial.print(len);
+            Serial.print(" frame: ");
+            for (uint16_t i = 0; i < written; ++i) {
+                if (i) Serial.print(' ');
+                Serial.print(buffer[i], HEX);
+            }
+            Serial.println();
         }
-        Serial.print(" frame: ");
-        for (uint16_t i = 0; i < written; ++i) {
-            if (i) Serial.print(' ');
-            Serial.print(buffer[i], HEX);
-        }
-        Serial.println();
     }
 }
 
 void GUIInterface::sendHandshake() {
-    if (!io) return;
+    if (!io || handshakePending) return;
     sendBinary(CMD_HANDSHAKE, GUI_HANDSHAKE_PAYLOAD, sizeof(GUI_HANDSHAKE_PAYLOAD));
     handshakePending = true;
     lastPingMs = millis();
@@ -228,23 +226,20 @@ void GUIInterface::processIncoming() {
             uint8_t payloadLen = 0;
             bool valid = BinaryProtocol::parseMessage(rxBuffer, expectedLength, cmd, payload, payloadLen);
             if (valid) {
-                Serial.print("GUI RX ");
-                Serial.print(commandName(cmd));
-                Serial.print(" (0x");
-                Serial.print(cmd, HEX);
-                Serial.print(") len=");
-                Serial.print(payloadLen);
-                if (cmd == CMD_PING) {
-                    Serial.print(" [t=");
-                    Serial.print(millis());
-                    Serial.print("ms]");
+                if (cmd != CMD_PING) {
+                    Serial.print("GUI RX ");
+                    Serial.print(commandName(cmd));
+                    Serial.print(" (0x");
+                    Serial.print(cmd, HEX);
+                    Serial.print(") len=");
+                    Serial.print(payloadLen);
+                    Serial.print(" frame: ");
+                    for (uint16_t i = 0; i < expectedLength; ++i) {
+                        if (i) Serial.print(' ');
+                        Serial.print(rxBuffer[i], HEX);
+                    }
+                    Serial.println();
                 }
-                Serial.print(" frame: ");
-                for (uint16_t i = 0; i < expectedLength; ++i) {
-                    if (i) Serial.print(' ');
-                    Serial.print(rxBuffer[i], HEX);
-                }
-                Serial.println();
                 handleIncomingCommand(cmd, const_cast<uint8_t*>(payload), payloadLen);
             }
             rxIndex = 0;
@@ -256,19 +251,13 @@ void GUIInterface::processIncoming() {
 void GUIInterface::handleIncomingCommand(uint8_t cmd, uint8_t* payload, uint8_t len) {
     switch (cmd) {
         case CMD_HANDSHAKE:
-            sendBinary(CMD_HANDSHAKE_REPLY, nullptr, 0);
-            guiConnected = true;
-            handshakePending = false;
-            lastPongMs = millis();
-            Serial.println("GUIInterface: Handshake requested by GUI");
-            disconnectNotified = false;
-            everConnected = true;
-            break;
         case CMD_HANDSHAKE_REPLY:
             guiConnected = true;
             handshakePending = false;
             lastPongMs = millis();
-            Serial.println("GUIInterface: Handshake ACK from GUI");
+            if (cmd == CMD_HANDSHAKE_REPLY) {
+                Serial.println("GUIInterface: Handshake ACK from GUI");
+            }
             disconnectNotified = false;
             everConnected = true;
             break;

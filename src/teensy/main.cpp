@@ -55,6 +55,8 @@ static void handleSerialCommand(char* line) {
         Serial.println(liveController.hasSeenGrid() ? "YES" : "NO");
         Serial.print("M4 connected: ");
         Serial.println(neoTrellisLink.isConnected() ? "YES" : "NO");
+        Serial.print("GUI connected: ");
+        Serial.println((guiLinkStarted && guiInterface.isConnected()) ? "YES" : "NO");
         Serial.print("Hardware ready: ");
         Serial.println(liveController.isHardwareReady() ? "YES" : "NO");
         return;
