@@ -19,6 +19,7 @@ public:
     void sendSysExToAbleton(uint8_t command, const uint8_t* data, int dataLength, bool requireLiveConnection = true);
     void sendHandshakeResponse();
     void waitForLiveHandshake(); // Wait for Live to initiate handshake
+    void resendCachedNamesToGUI();
     
     // System state management
     bool isLiveConnected() { return liveConnected; }
@@ -46,10 +47,19 @@ private:
     int getLocalKeyFromGlobal(int globalKey);
     void processSysEx(byte* data, int length);
     void processHandshakeMessage(uint8_t* data, int length);
+    void broadcastCachedNamesToGUI();
 
 public:
     bool isHardwareReady() const { return hardwareReady; }
     void setHardwareReady(bool v) { hardwareReady = v; }
     void setLiveConnected(bool v) { liveConnected = v; }
     bool hasSeenGrid() const { return gridSeen; }
+
+private:
+    static constexpr uint8_t MAX_TRACK_NAME_LEN = 64;
+    static constexpr uint8_t MAX_CLIP_NAME_LEN = 64;
+    char trackNameCache[GRID_TRACKS][MAX_TRACK_NAME_LEN];
+    bool trackNameValid[GRID_TRACKS] = {false};
+    char clipNameCache[TOTAL_KEYS][MAX_CLIP_NAME_LEN];
+    bool clipNameValid[TOTAL_KEYS] = {false};
 };

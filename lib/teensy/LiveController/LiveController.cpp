@@ -45,7 +45,10 @@ bool parseLiveSysExFrame(const uint8_t* data,
 
 // Constructor
 LiveController::LiveController() {
-    // This is now empty as there are no I2C objects to initialize.
+    memset(trackNameCache, 0, sizeof(trackNameCache));
+    memset(trackNameValid, 0, sizeof(trackNameValid));
+    memset(clipNameCache, 0, sizeof(clipNameCache));
+    memset(clipNameValid, 0, sizeof(clipNameValid));
 }
 
 // Destructor - nothing to free (global lifetime on MCU)
@@ -219,6 +222,37 @@ void LiveController::processMIDI() {
                 break;
             }
 
+            case CMD_TRACK_SELECT: {
+                if (payloadLen >= 1) {
+                    uint8_t idx = payload[0] & 0x7F;
+                    Serial.printf("Live: Track select echo -> %u\n", idx);
+                } else {
+                    Serial.println("Live: Track select payload too short");
+                }
+                break;
+            }
+
+            case CMD_SCENE_SELECT: {
+                if (payloadLen >= 1) {
+                    uint8_t idx = payload[0] & 0x7F;
+                    Serial.printf("Live: Scene select echo -> %u\n", idx);
+                } else {
+                    Serial.println("Live: Scene select payload too short");
+                }
+                break;
+            }
+
+            case CMD_DETAIL_CLIP: {
+                if (payloadLen >= 2) {
+                    uint8_t track = payload[0] & 0x7F;
+                    uint8_t scene = payload[1] & 0x7F;
+                    Serial.printf("Live: Detail clip focus -> track %u scene %u\n", track, scene);
+                } else {
+                    Serial.println("Live: Detail clip payload too short");
+                }
+                break;
+            }
+
             case CMD_HANDSHAKE_REPLY: {
                 Serial.println("Live: Handshake final (0x61) received.");
                 break;
@@ -273,6 +307,16 @@ void LiveController::processMIDI() {
                     }
                     clipName[nameLen] = '\0';
                     guiInterface.sendClipName(track, scene, clipName);
+                    int padIndex = scene * GRID_TRACKS + track;
+                    if (padIndex >= 0 && padIndex < TOTAL_KEYS) {
+                        size_t copyLen = static_cast<size_t>(nameLen);
+                        if (copyLen > MAX_CLIP_NAME_LEN - 1) {
+                            copyLen = MAX_CLIP_NAME_LEN - 1;
+                        }
+                        memcpy(clipNameCache[padIndex], clipName, copyLen);
+                        clipNameCache[padIndex][copyLen] = '\0';
+                        clipNameValid[padIndex] = true;
+                    }
                     Serial.printf("Clip name -> track %u scene %u: %s\n", track, scene, clipName);
                 } else {
                     Serial.printf("Clip name -> track %u scene %u (len=%u)\n", track, scene, payloadLen);
@@ -303,11 +347,64 @@ void LiveController::processMIDI() {
                 break;
             }
 
-            case CMD_SCENE_NAME:
-            case CMD_SCENE_COLOR:
-            case CMD_SCENE_IS_TRIGGERED:
-                Serial.printf("Scene CMD 0x%02X len=%u\n", command, payloadLen);
+            case CMD_SCENE_NAME: {
+                if (payloadLen < 2) {
+                    Serial.println("Live: Scene name payload too short");
+                    break;
+                }
+                uint8_t scene = payload[0] & 0x7F;
+                char sceneName[64] = {0};
+                int nameLen = payloadLen - 1;
+                if (nameLen > 0 && nameLen < 63) {
+                    for (int i = 0; i < nameLen; ++i) {
+                        sceneName[i] = static_cast<char>(payload[1 + i] & 0x7F);
+                    }
+                    sceneName[nameLen] = '\0';
+                    guiInterface.sendSceneName(scene, sceneName);
+                    Serial.printf("Scene name -> scene %u: %s\n", scene, sceneName);
+                } else {
+                    Serial.printf("Scene name -> scene %u (len=%u)\n", scene, payloadLen);
+                }
                 break;
+            }
+
+            case CMD_SCENE_COLOR: {
+                if (payloadLen < 4) {
+                    Serial.println("Live: Scene color payload too short");
+                    break;
+                }
+                uint8_t scene = payload[0] & 0x7F;
+                uint8_t r = payload[1] & 0x7F;
+                uint8_t g = payload[2] & 0x7F;
+                uint8_t b = payload[3] & 0x7F;
+                guiInterface.sendSceneColor(scene, r, g, b);
+                Serial.printf("Scene color -> scene %u (%u,%u,%u)\n", scene, r, g, b);
+                break;
+            }
+
+            case CMD_SCENE_STATE: {
+                if (payloadLen < 2) {
+                    Serial.println("Live: Scene state payload too short");
+                    break;
+                }
+                uint8_t scene = payload[0] & 0x7F;
+                uint8_t flags = payload[1] & 0x7F;
+                guiInterface.sendSceneState(scene, flags);
+                Serial.printf("Scene state -> scene %u flags 0x%02X\n", scene, flags);
+                break;
+            }
+
+            case CMD_SCENE_IS_TRIGGERED: {
+                if (payloadLen < 2) {
+                    Serial.println("Live: Scene triggered payload too short");
+                    break;
+                }
+                uint8_t scene = payload[0] & 0x7F;
+                uint8_t flag = payload[1] & 0x7F;
+                guiInterface.sendSceneTriggered(scene, flag);
+                Serial.printf("Scene triggered -> scene %u flag %u\n", scene, flag);
+                break;
+            }
 
             case CMD_TRACK_NAME: {
                 if (payloadLen < 2) {
@@ -324,6 +421,15 @@ void LiveController::processMIDI() {
                     }
                     trackName[nameLen] = '\0';
                     guiInterface.sendTrackName(track, trackName);
+                    if (track < GRID_TRACKS) {
+                        size_t copyLen = static_cast<size_t>(nameLen);
+                        if (copyLen > MAX_TRACK_NAME_LEN - 1) {
+                            copyLen = MAX_TRACK_NAME_LEN - 1;
+                        }
+                        memcpy(trackNameCache[track], trackName, copyLen);
+                        trackNameCache[track][copyLen] = '\0';
+                        trackNameValid[track] = true;
+                    }
                     Serial.printf("Track name -> track %u: %s\n", track, trackName);
                 } else {
                     Serial.printf("Track name -> track %u (len=%u)\n", track, payloadLen);
@@ -352,7 +458,16 @@ void LiveController::processMIDI() {
             }
 
             case CMD_TRACK_COLOR:
-                Serial.printf("Track color update track %u\n", payloadLen ? (payload[0] & 0x7F) : 0);
+                if (payloadLen >= 4) {
+                    uint8_t track = payload[0] & 0x7F;
+                    uint8_t r = payload[1] & 0x7F;
+                    uint8_t g = payload[2] & 0x7F;
+                    uint8_t b = payload[3] & 0x7F;
+                    guiInterface.sendTrackColor(track, r, g, b);
+                    Serial.printf("Track color update track %u -> (%u,%u,%u)\n", track, r, g, b);
+                } else {
+                    Serial.println("Track color payload too short");
+                }
                 break;
 
             case CMD_TRACK_CROSSFADE:
@@ -402,6 +517,10 @@ void LiveController::processMIDI() {
                 Serial.printf("Transport CMD 0x%02X -> value %u len=%u\n", command, value, payloadLen);
                 break;
             }
+
+            case CMD_STEP_SEQUENCER_STATE:
+                Serial.printf("Step sequencer state len=%u\n", payloadLen);
+                break;
 
             case CMD_DISCONNECT: {
                 Serial.println("Live: Disconnect command received — clearing state.");
@@ -581,6 +700,7 @@ void LiveController::processHandshakeMessage(uint8_t* data, int length) {
     gridRequestRetries = 0;
     gridRequestLastAttempt = 0;
     Serial.println("Teensy: ✓ Live connection established (ack sent).");
+    broadcastCachedNamesToGUI();
     if (neoTrellisLink.isConnected()) {
         Serial.println("Teensy: Live connected — enabling NeoTrellis key scanning.");
         neoTrellisLink.sendCommand(CMD_ENABLE_KEYS, nullptr, 0);
@@ -621,6 +741,30 @@ void LiveController::waitForLiveHandshake() {
                 // Pass the message to the dedicated handler.
                 processHandshakeMessage(data, length);
             }
+        }
+    }
+}
+
+void LiveController::resendCachedNamesToGUI() {
+    broadcastCachedNamesToGUI();
+}
+
+void LiveController::broadcastCachedNamesToGUI() {
+    if (!guiInterface.isConnected()) {
+        return;
+    }
+
+    for (int track = 0; track < GRID_TRACKS; ++track) {
+        if (trackNameValid[track] && trackNameCache[track][0] != '\0') {
+            guiInterface.sendTrackName(static_cast<uint8_t>(track), trackNameCache[track]);
+        }
+    }
+
+    for (int pad = 0; pad < TOTAL_KEYS; ++pad) {
+        if (clipNameValid[pad] && clipNameCache[pad][0] != '\0') {
+            uint8_t track = pad % GRID_TRACKS;
+            uint8_t scene = pad / GRID_TRACKS;
+            guiInterface.sendClipName(track, scene, clipNameCache[pad]);
         }
     }
 }

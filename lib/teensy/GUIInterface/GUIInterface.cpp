@@ -1,5 +1,6 @@
 #include "GUIInterface/GUIInterface.h"
 #include "../UIBridge.h"
+#include "../LiveController/LiveController.h"
 #include <math.h>
 #include <cstring>
 
@@ -14,6 +15,7 @@ const uint8_t GUI_HANDSHAKE_PAYLOAD[] = {
 }
 
 extern UIBridge uiBridge;
+extern LiveController liveController;
 
 void GUIInterface::begin(Stream& serialPort) {
     io = &serialPort;
@@ -108,6 +110,56 @@ void GUIInterface::sendTrackName(uint8_t track, const char* name) {
     payload[0] = track & 0x7F;
     memcpy(&payload[1], name, len);
     sendBinary(CMD_TRACK_NAME, payload, static_cast<uint8_t>(len + 1));
+}
+
+void GUIInterface::sendTrackColor(uint8_t track, uint8_t r, uint8_t g, uint8_t b) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(r & 0x7F),
+        static_cast<uint8_t>(g & 0x7F),
+        static_cast<uint8_t>(b & 0x7F)
+    };
+    sendBinary(CMD_TRACK_COLOR, payload, sizeof(payload));
+}
+
+void GUIInterface::sendSceneName(uint8_t scene, const char* name) {
+    if (!io || !name) return;
+    size_t len = strnlen(name, 250);
+    if (len > 250) len = 250;
+    uint8_t payload[251];
+    payload[0] = scene & 0x7F;
+    memcpy(&payload[1], name, len);
+    sendBinary(CMD_SCENE_NAME, payload, static_cast<uint8_t>(len + 1));
+}
+
+void GUIInterface::sendSceneColor(uint8_t scene, uint8_t r, uint8_t g, uint8_t b) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(scene & 0x7F),
+        static_cast<uint8_t>(r & 0x7F),
+        static_cast<uint8_t>(g & 0x7F),
+        static_cast<uint8_t>(b & 0x7F)
+    };
+    sendBinary(CMD_SCENE_COLOR, payload, sizeof(payload));
+}
+
+void GUIInterface::sendSceneState(uint8_t scene, uint8_t flags) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(scene & 0x7F),
+        static_cast<uint8_t>(flags & 0x7F)
+    };
+    sendBinary(CMD_SCENE_STATE, payload, sizeof(payload));
+}
+
+void GUIInterface::sendSceneTriggered(uint8_t scene, uint8_t flag) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(scene & 0x7F),
+        static_cast<uint8_t>(flag & 0x7F)
+    };
+    sendBinary(CMD_SCENE_IS_TRIGGERED, payload, sizeof(payload));
 }
 
 void GUIInterface::sendBPM(float bpm) {
@@ -260,6 +312,7 @@ void GUIInterface::handleIncomingCommand(uint8_t cmd, uint8_t* payload, uint8_t 
             }
             disconnectNotified = false;
             everConnected = true;
+            liveController.resendCachedNamesToGUI();
             break;
         case CMD_PING:
             guiConnected = true;

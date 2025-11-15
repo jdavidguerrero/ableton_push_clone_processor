@@ -208,6 +208,22 @@ void UIBridge::handleUARTCommand(uint8_t cmd, uint8_t* payload, uint8_t len) {
         case CMD_GRID_BANK_DOWN:
             shiftSessionRing(0, -GRID_SCENES);
             break;
+        case CMD_TRANSPORT_PLAY:
+            if (len >= 1) {
+                uint8_t playState = payload[0] & 0x7F; // 1=play, 0=stop
+                liveController.sendSysExToAbleton(CMD_TRANSPORT_PLAY, &playState, 1);
+            } else {
+                liveController.sendSysExToAbleton(CMD_TRANSPORT_PLAY, nullptr, 0);
+            }
+            break;
+        case CMD_TRANSPORT_RECORD:
+            if (len >= 1) {
+                uint8_t recState = payload[0] & 0x7F;
+                liveController.sendSysExToAbleton(CMD_TRANSPORT_RECORD, &recState, 1);
+            } else {
+                liveController.sendSysExToAbleton(CMD_TRANSPORT_RECORD, nullptr, 0);
+            }
+            break;
         case CMD_CLIP_LAUNCH:
         case CMD_CLIP_TRIGGER:
             if (len >= 2) {

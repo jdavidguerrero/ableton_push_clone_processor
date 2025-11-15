@@ -20,6 +20,11 @@ public:
                            uint8_t bMsb, uint8_t bLsb);
     void sendClipName(uint8_t track, uint8_t scene, const char* name);
     void sendTrackName(uint8_t track, const char* name);
+    void sendTrackColor(uint8_t track, uint8_t r, uint8_t g, uint8_t b);
+    void sendSceneName(uint8_t scene, const char* name);
+    void sendSceneColor(uint8_t scene, uint8_t r, uint8_t g, uint8_t b);
+    void sendSceneState(uint8_t scene, uint8_t flags);
+    void sendSceneTriggered(uint8_t scene, uint8_t flag);
     void sendBPM(float bpm);
     void sendTransportState(bool isPlaying, bool isRecording);
     bool isConnected() const { return guiConnected; }
