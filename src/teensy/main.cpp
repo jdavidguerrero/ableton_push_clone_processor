@@ -18,6 +18,7 @@ extern GUIInterface guiInterface;
 // Simple serial command parser for navigation and clip play
 static char serialLine[64];
 static uint8_t serialIdx = 0;
+static bool guiLinkStarted = false;
 
 static void handleSerialCommand(char* line) {
     // Trim leading spaces
@@ -182,31 +183,38 @@ void setup() {
 
     setupHardware();
 
-    // Initialize GUI Interface (USB Serial communication)
-    Serial.println("\n=== GUI Interface Setup ===");
-    guiInterface.begin();
-    Serial.println("GUI Interface ready for bidirectional communication");
-
     // Step 1: Initialize M4 UART communication
     Serial.println("\n=== Step 1: M4 Setup ===");
     bool m4Ready = neoTrellisLink.initializeCommunication();
-    if (m4Ready) {
-        liveController.setHardwareReady(true);
-    } else {
+    if (!m4Ready) {
         Serial.println("Teensy: WARNING - M4 communication not ready. Live handshake will wait.");
     }
+
+    if (neoTrellisLink.isConnected()) {
+        Serial.println("\n=== Step 2: GUI Interface Setup ===");
+        Serial2.begin(115200);
+        Serial.println("Serial2 (GUI link) initialized @ 115200 bps");
+        guiInterface.begin(Serial2);
+        guiLinkStarted = true;
+        Serial.println("GUI Interface ready — awaiting GUI handshake");
+    } else {
+        Serial.println("Teensy: Deferring GUI setup until NeoTrellis link is up");
+    }
     
-    // Step 2: Wait before connecting to Live (let hardware settle)
-    Serial.println("\n=== Step 2: System Stabilization ===");
-    Serial.println("Allowing hardware connections to stabilize...");
-    delay(2000); // 2 second pause for all hardware to be ready
-    
-    Serial.println("\n=== Step 3: USB MIDI Ready ===");
+    Serial.println("\n=== USB MIDI Ready ===");
     Serial.println("System ready - now open Live and watch the logs...");
     Serial.println("Note: Live integration will start automatically when Live sends handshake");
 }
 
 void loop() {
+    if (!guiLinkStarted && neoTrellisLink.isConnected()) {
+        Serial.println("Teensy: NeoTrellis ready — starting GUI link");
+        Serial2.begin(115200);
+        Serial.println("Serial2 (GUI link) initialized @ 115200 bps");
+        guiInterface.begin(Serial2);
+        guiLinkStarted = true;
+    }
+
     // PRIORITY 1: Process hardware (UART from M4) FIRST - critical for pad responsiveness
     loopHardware();  // This calls uartHandler.read() to process pad events from M4
 
@@ -214,12 +222,22 @@ void loop() {
     guiInterface.update();
 
     // PRIORITY 3: Process MIDI messages based on system state
+    bool m4Ready = neoTrellisLink.isConnected();
+    bool guiReady = guiLinkStarted && guiInterface.isConnected();
+
     if (liveController.isLiveConnected()) {
         // Full operation mode - process limited MIDI per loop to avoid blocking UART
         liveController.processMIDI();
     } else {
-        // Waiting for Live - check for handshake
-        liveController.waitForLiveHandshake();
+        if (m4Ready && guiReady) {
+            liveController.waitForLiveHandshake();
+        } else {
+            static unsigned long lastGateLog = 0;
+            if (millis() - lastGateLog > 2000) {
+                Serial.println("Waiting for GUI/NeoTrellis before attempting Live handshake...");
+                lastGateLog = millis();
+            }
+        }
     }
 
     // PRIORITY 4: Run periodic tasks

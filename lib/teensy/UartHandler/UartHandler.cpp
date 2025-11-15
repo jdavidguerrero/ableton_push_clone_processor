@@ -116,6 +116,9 @@ void UartHandler::handleNeoTrellisCommand(uint8_t command, uint8_t* data, int le
         case CMD_PING:
             neoTrellisLink.handlePingResponse();
             break;
+        case CMD_DISCONNECT:
+            neoTrellisLink.handleDisconnectNotice();
+            break;
         default:
             uiBridge.handleUARTCommand(command, data, static_cast<uint8_t>(length));
             break;

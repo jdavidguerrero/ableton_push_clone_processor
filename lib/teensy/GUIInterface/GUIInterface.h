@@ -1,13 +1,15 @@
 #pragma once
 
 #include <Arduino.h>
+#include "MidiCommands.h"
+#include "shared/BinaryProtocol.h"
 
 // Lightweight bridge that mirrors Ableton/NeoTrellis state to a USB Serial GUI.
 // The on-board firmware compiles even if no desktop GUI is connected; the class
 // simply prints concise messages that higher level tools can parse.
 class GUIInterface {
 public:
-    void begin();
+    void begin(Stream& serialPort = Serial);
     void update();
 
     void sendGridColors7bit(const uint8_t* data, int length);
@@ -20,11 +22,26 @@ public:
     void sendTrackName(uint8_t track, const char* name);
     void sendBPM(float bpm);
     void sendTransportState(bool isPlaying, bool isRecording);
+    bool isConnected() const { return guiConnected; }
 
 private:
     void sendTag(const char* tag);
     void printHexPreview(const uint8_t* data, int length, int maxBytes = 16);
+    void processIncoming();
+    void handleIncomingCommand(uint8_t cmd, uint8_t* payload, uint8_t len);
+    void sendBinary(uint8_t cmd, const uint8_t* payload, uint8_t len);
+    void sendHandshake();
+    void sendDisconnectEvent();
 
+    Stream* io = nullptr;
     unsigned long lastHeartbeatMs = 0;
+    unsigned long lastPingMs = 0;
+    unsigned long lastPongMs = 0;
+    bool handshakePending = false;
+    bool guiConnected = false;
+    bool disconnectNotified = false;
+    bool everConnected = false;
+    uint8_t rxBuffer[256];
+    uint16_t rxIndex = 0;
+    uint16_t expectedLength = 0;
 };
-

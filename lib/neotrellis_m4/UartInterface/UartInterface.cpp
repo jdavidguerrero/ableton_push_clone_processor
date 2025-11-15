@@ -38,6 +38,9 @@ void UartInterface::begin() {
     Serial.println("  Teensy Pin 0 (RX1) -> M4 Pin 21 (TX)");
     Serial.println("  GND -> GND");
     Serial.println("Waiting for data from Teensy (Serial1)...");
+
+    Serial.println("NeoTrellis M4: Notifying Teensy of reset/disconnect state");
+    sendToTeensy(CMD_DISCONNECT, nullptr, 0);
 }
 
 void UartInterface::read() {
@@ -227,6 +230,13 @@ void UartInterface::handleTeensyCommand(uint8_t command, uint8_t* data, int leng
         case CMD_DISABLE_KEYS:
             Serial.println("NeoTrellis M4: Key scanning DISABLED by Teensy");
             controller.disableKeyScanning();
+            break;
+
+        case CMD_DISCONNECT:
+            Serial.println("NeoTrellis M4: Teensy requested disconnect/reset, clearing grid");
+            controller.disableKeyScanning();
+            controller.allOff();
+            controller.setGridInitialized(false);
             break;
 
         default:

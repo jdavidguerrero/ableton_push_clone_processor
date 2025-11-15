@@ -13,17 +13,21 @@ public:
     bool initializeCommunication();
     void update();
 
-    void setConnected(bool connected);
+    void setConnected(bool connected, bool remoteRequest = false);
     bool isConnected() const { return m4Connected; }
 
     void handleHandshakeAck();
     void handlePingResponse();
+    void handleDisconnectNotice();
 
 private:
     void requestHandshake();
+    void sendDisconnectEvent();
 
     bool m4Connected = false;
     bool handshakePending = false;
+    bool disconnectNotified = false;
+    bool everConnected = false;
     unsigned long lastHandshakeRequestMs = 0;
     unsigned long lastReconnectAttemptMs = 0;
     unsigned long lastPingSentMs = 0;

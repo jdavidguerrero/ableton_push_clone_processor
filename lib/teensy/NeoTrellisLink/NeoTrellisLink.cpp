@@ -44,6 +44,15 @@ void NeoTrellisLink::sendRaw(const uint8_t* data, int length) {
     Serial1.flush();
 }
 
+void NeoTrellisLink::sendDisconnectEvent() {
+    if (disconnectNotified || !everConnected) {
+        return;
+    }
+    sendCommand(CMD_DISCONNECT, nullptr, 0);
+    disconnectNotified = true;
+    Serial.println("Teensy: Notified NeoTrellis of disconnect/reset state");
+}
+
 void NeoTrellisLink::setPixelColor(int key, uint32_t color) {
     if (key < 0 || key >= TOTAL_KEYS) return;
     uint8_t payload[] = {
@@ -95,7 +104,9 @@ bool NeoTrellisLink::initializeCommunication() {
 
     handshakeAttempts = 0;
     handshakePending = false;
+    disconnectNotified = false;
     setConnected(false);
+    sendDisconnectEvent();
 
     while (!m4Connected && handshakeAttempts < MAX_INITIAL_ATTEMPTS) {
         requestHandshake();
@@ -151,8 +162,11 @@ void NeoTrellisLink::requestHandshake() {
     handshakeAttempts++;
 }
 
-void NeoTrellisLink::setConnected(bool connected) {
+void NeoTrellisLink::setConnected(bool connected, bool remoteRequest) {
     if (m4Connected == connected) {
+        if (!connected && remoteRequest) {
+            disconnectNotified = true;
+        }
         return;
     }
 
@@ -165,11 +179,19 @@ void NeoTrellisLink::setConnected(bool connected) {
         handshakeAttempts = 0;
         lastPongMs = millis();
         lastPingSentMs = lastPongMs;
+        disconnectNotified = false;
+        everConnected = true;
         runConnectionSweep();
     } else {
         handshakePending = false;
         lastPongMs = 0;
         lastPingSentMs = 0;
+        liveController.setHardwareReady(false);
+        if (remoteRequest) {
+            disconnectNotified = true;
+        } else {
+            sendDisconnectEvent();
+        }
     }
 }
 
@@ -187,4 +209,9 @@ void NeoTrellisLink::handleHandshakeAck() {
 
 void NeoTrellisLink::handlePingResponse() {
     lastPongMs = millis();
+}
+
+void NeoTrellisLink::handleDisconnectNotice() {
+    Serial.println("Teensy: NeoTrellis reported disconnect/reset");
+    setConnected(false, true);
 }
