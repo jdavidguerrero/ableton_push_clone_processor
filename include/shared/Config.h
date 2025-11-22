@@ -47,3 +47,26 @@
 
 // === DEBUG FLAGS ===
 #define DEBUG_LIVE_LOG  // Enable Live command logging
+
+// === FADERS CONFIGURATION (Teensy only) ===
+#define NUM_FADERS 4
+#define FADER_PINS {A0, A1, A2, A3}  // 4 ALPS B50K faders
+
+// === ENCODERS CONFIGURATION (Teensy only) ===
+#define NUM_ENCODERS 4
+// Format: {Enc1_A, Enc1_B, Enc2_A, Enc2_B, Enc3_A, Enc3_B, Enc4_A, Enc4_B}
+#define ENCODER_PINS {2, 3, 4, 5, 6, 7, 10, 11}
+
+// === MCP23017 I/O EXPANDER CONFIGURATION (Teensy only) ===
+#define MCP_ENCODER_BUTTONS_ADDR 0x20  // MCP23017 #1: 4 encoder buttons
+#define MCP_EXTRA_BUTTONS_ADDR 0x21    // MCP23017 #2: 8 extra buttons
+#define NUM_ENCODER_BUTTONS 4          // Buttons on first MCP23017
+#define NUM_EXTRA_BUTTONS 8            // Buttons on second MCP23017
+#define TOTAL_MCP_BUTTONS (NUM_ENCODER_BUTTONS + NUM_EXTRA_BUTTONS)  // 12 total
+
+// === BUTTON DEBOUNCE ===
+#define BUTTON_DEBOUNCE_MS 50
+
+// === ADC CONFIGURATION ===
+#define ADC_RESOLUTION 12              // Teensy 4.1 supports 12-bit ADC
+#define FADER_TOLERANCE 8              // Minimum change to trigger update (out of 4096)

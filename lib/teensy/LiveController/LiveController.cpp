@@ -164,6 +164,9 @@ void LiveController::processMIDI() {
                     Serial.println("Teensy: First grid seen — enabling key scanning on M4");
                     neoTrellisLink.sendCommand(CMD_ENABLE_KEYS, nullptr, 0);
                 }
+                
+                // After a bulk update, resend names to ensure GUI is in sync
+                broadcastCachedNamesToGUI();
                 break;
             }
 
@@ -538,6 +541,21 @@ void LiveController::processMIDI() {
             case CMD_HANDSHAKE:
                 Serial.println("Live: secondary handshake ping received");
                 break;
+
+            case 0x48: // Previously unhandled
+            case 0x4B: // Previously unhandled
+            case 0x04: // Previously unhandled
+            {
+                Serial.printf("Live: Received known but unhandled CMD 0x%02X len=%u\n", command, payloadLen);
+                break;
+            }
+
+            case 0x6B: // Previously unhandled
+            {
+                uint8_t value = payloadLen > 0 ? (payload[0] & 0x7F) : 0;
+                Serial.printf("Live: Received known but unhandled CMD 0x%02X value=%u\n", command, value);
+                break;
+            }
 
             default:
                 // Custom vendor messages (F0 7D ...) still go through processSysEx
