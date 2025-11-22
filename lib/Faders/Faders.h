@@ -38,15 +38,18 @@ public:
     void onTrackVolumeUpdate(int trackIndex, int volume);
     void onTrackParamUpdate(int trackIndex, uint8_t paramType, int value);
 
-    // Callbacks
-    void (*onVolumeChange)(int trackIndex, int volume);
-    void (*onPickupStateChange)(int faderIndex, bool needsPickup);
-
 private:
     int oldValues[NUM_FADERS];
     int currentBankOffset;              // Offset del banco actual (0, 4, 8...)
     FaderParamMode paramMode;            // Modo de parámetros (Volume/Pan, Sends, etc.)
     FaderPickupState pickupStates[NUM_FADERS];
+
+public:
+    // Callbacks (moved after private members to match initialization order)
+    void (*onVolumeChange)(int trackIndex, int volume);
+    void (*onPickupStateChange)(int faderIndex, bool needsPickup);
+
+private:
 
     bool checkPickup(int faderIndex, int physicalValue, int targetValue);
     void sendVolumeCommand(int trackIndex, int volume);

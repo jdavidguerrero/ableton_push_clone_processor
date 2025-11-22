@@ -46,7 +46,7 @@
 #define ABLETON_SYSEX_TIMEOUT 1000
 
 // === DEBUG FLAGS ===
-#define DEBUG_LIVE_LOG  // Enable Live command logging
+// #define DEBUG_LIVE_LOG  // Enable Live command logging (disabled to reduce spam)
 
 // === FADERS CONFIGURATION (Teensy only) ===
 #define NUM_FADERS 4

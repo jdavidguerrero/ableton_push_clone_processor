@@ -16,6 +16,7 @@
 #define CMD_UI_NAVIGATE     0x85  // Navigate browser (0=up, 1=down, 2=left, 3=right)
 #define CMD_UI_LOAD_DEVICE  0x86  // Load selected device
 #define CMD_UI_CREATE_SCENE 0x87  // Create new scene
+#define CMD_UI_SHIFT        0x88  // Shift button state
 
 // === GRID NAVIGATION COMMANDS (M4 → Teensy → Live) ===
 // NOTE: CMD_GRID_SHIFT_* commands are now defined in MidiCommands.h (0xB0-0xB3)

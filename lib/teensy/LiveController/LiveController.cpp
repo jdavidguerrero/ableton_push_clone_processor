@@ -170,44 +170,7 @@ void LiveController::processMIDI() {
                 break;
             }
 
-            case CMD_GRID_SINGLE_PAD: {
-                if (payloadLen != 7) {
-                    Serial.print("Live: CMD_GRID_SINGLE_PAD invalid length ");
-                    Serial.println(payloadLen);
-                    break;
-                }
-                uint8_t padIndex = payload[0] & 0x7F;
-                if (padIndex >= TOTAL_KEYS) {
-                    Serial.print("Live: CMD_GRID_SINGLE_PAD pad out of range ");
-                    Serial.println(padIndex);
-                    break;
-                }
-                auto decode14 = [&](int offset) -> uint16_t {
-                    return (uint16_t)(((payload[offset] & 0x7F) << 7) | (payload[offset + 1] & 0x7F));
-                };
-                uint16_t r14 = decode14(1);
-                uint16_t g14 = decode14(3);
-                uint16_t b14 = decode14(5);
 
-                auto compressTo8 = [](uint16_t value) -> uint8_t {
-                    return (value <= 0xFF) ? static_cast<uint8_t>(value) : static_cast<uint8_t>(value >> 6);
-                };
-                uint8_t r8 = compressTo8(r14);
-                uint8_t g8 = compressTo8(g14);
-                uint8_t b8 = compressTo8(b14);
-
-                Serial.printf("Single-pad update %u -> RGB %u,%u,%u\n", padIndex, r8, g8, b8);
-
-                uint8_t m4Data[] = {
-                    padIndex,
-                    payload[1], payload[2],
-                    payload[3], payload[4],
-                    payload[5], payload[6]
-                };
-                neoTrellisLink.sendCommand(CMD_LED_PAD_UPDATE_14, m4Data, sizeof(m4Data));
-                guiInterface.sendPadColor14bit(padIndex, payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
-                break;
-            }
 
             case CMD_RING_POSITION: {
                 if (payloadLen >= 7) {
@@ -257,7 +220,40 @@ void LiveController::processMIDI() {
             }
 
             case CMD_HANDSHAKE_REPLY: {
-                Serial.println("Live: Handshake final (0x61) received.");
+                Serial.println("Live: Handshake final (0x01) received.");
+                break;
+            }
+
+            case CMD_GRID_SINGLE_PAD: {
+                if (payloadLen < 7) {
+                    Serial.println("Live: CMD_GRID_SINGLE_PAD payload too short");
+                    break;
+                }
+                uint8_t padIndex = payload[0] & 0x7F;
+                
+                // Decode 14-bit color
+                // auto decodeColor = [&](uint16_t offset) -> uint8_t {
+                //     return (uint8_t)(((payload[offset] & 0x7F) << 7) | (payload[offset + 1] & 0x7F));
+                // };
+                // uint8_t r = decodeColor(1);
+                // uint8_t g = decodeColor(3);
+                // uint8_t b = decodeColor(5);
+
+                if (padIndex < TOTAL_KEYS) {
+                    // Serial.printf("GRID_SINGLE_PAD pad %02d RGB=%u,%u,%u\n", padIndex, r, g, b);
+                    
+                    // Forward to NeoTrellis
+                    uint8_t m4Data[] = {
+                        padIndex,
+                        payload[1], payload[2],
+                        payload[3], payload[4],
+                        payload[5], payload[6]
+                    };
+                    neoTrellisLink.sendCommand(CMD_LED_PAD_UPDATE_14, m4Data, sizeof(m4Data));
+                    
+                    // Forward to GUI
+                    guiInterface.sendPadColor14bit(padIndex, payload[1], payload[2], payload[3], payload[4], payload[5], payload[6]);
+                }
                 break;
             }
 
@@ -286,7 +282,8 @@ void LiveController::processMIDI() {
                         payload[7], payload[8]
                     };
                     neoTrellisLink.sendCommand(CMD_LED_PAD_UPDATE_14, m4Data, sizeof(m4Data));
-                    guiInterface.sendPadColor14bit(padIndex, payload[3], payload[4], payload[5], payload[6], payload[7], payload[8]);
+                    // Forward full clip state to GUI (includes state + color)
+                    guiInterface.sendClipState(track, scene, state, payload[3], payload[4], payload[5], payload[6], payload[7], payload[8]);
                     uint8_t statePayload[] = { static_cast<uint8_t>(padIndex), state };
                     neoTrellisLink.sendCommand(CMD_LED_CLIP_STATE, statePayload, sizeof(statePayload));
                 }
@@ -327,26 +324,15 @@ void LiveController::processMIDI() {
                 break;
             }
 
-            case CMD_CLIP_LOOP:
-            case CMD_CLIP_MUTED:
-            case CMD_CLIP_WARP:
-            case CMD_CLIP_START:
-            case CMD_CLIP_END: {
-                if (payloadLen < 3) {
-                    Serial.println("Live: Clip meta payload too short");
-                    break;
-                }
-                uint8_t track = payload[0] & 0x7F;
-                uint8_t scene = payload[1] & 0x7F;
-                Serial.printf("Clip CMD 0x%02X -> track %u scene %u len=%u\n", command, track, scene, payloadLen);
-                break;
-            }
+
 
             case CMD_CLIP_TRIGGER:
             case CMD_CLIP_STOP:
-            case CMD_SCENE_FIRE: {
-                // These normally originate from hardware; log if Live echoes them
-                Serial.printf("Live issued clip/scene command 0x%02X (len=%u)\n", command, payloadLen);
+            case CMD_SCENE_FIRE:
+            case CMD_TRACK_PLAYING_SLOT:
+            case CMD_TRACK_FIRED_SLOT: {
+                // These normally originate from hardware or are informational from Live
+                // Silently ignore to prevent spam
                 break;
             }
 
@@ -442,21 +428,71 @@ void LiveController::processMIDI() {
 
             case CMD_TRACK_VOLUME:
             case CMD_TRACK_PAN:
-            case CMD_TRACK_MUTE:
-            case CMD_TRACK_SOLO:
-            case CMD_TRACK_ARM:
+            {
+                // Volume and Pan use 14-bit resolution (3 bytes: track, MSB, LSB)
+                if (payloadLen < 3) {
+                    Serial.println("Live: Volume/Pan payload too short (need 3 bytes)");
+                    break;
+                }
+                uint8_t track = payload[0] & 0x7F;
+                uint8_t msb = payload[1] & 0x7F;
+                uint8_t lsb = payload[2] & 0x7F;
+
+                if (command == CMD_TRACK_VOLUME) {
+                    guiInterface.sendMixerVolume(track, msb, lsb);
+                    uint16_t value14bit = (msb << 7) | lsb;
+                    Serial.printf("Mixer VOLUME -> track %u: %u (14bit)\n", track, value14bit);
+                } else {
+                    guiInterface.sendMixerPan(track, msb, lsb);
+                    uint16_t value14bit = (msb << 7) | lsb;
+                    Serial.printf("Mixer PAN -> track %u: %u (14bit)\n", track, value14bit);
+                }
+                break;
+            }
+
             case CMD_TRACK_SEND_A:
 #if CMD_TRACK_SEND_A != CMD_TRACK_SEND_B
             case CMD_TRACK_SEND_B:
 #endif
             {
-                if (payloadLen < 1) {
-                    Serial.println("Live: Track command payload too short");
+                // Sends use 14-bit resolution (4 bytes: track, sendIndex, MSB, LSB)
+                if (payloadLen < 4) {
+                    Serial.println("Live: Send payload too short (need 4 bytes)");
                     break;
                 }
                 uint8_t track = payload[0] & 0x7F;
-                uint8_t value = (payloadLen > 1) ? (payload[1] & 0x7F) : 0;
-                Serial.printf("Track CMD 0x%02X -> track %u value %u\n", command, track, value);
+                uint8_t sendIndex = payload[1] & 0x7F;
+                uint8_t msb = payload[2] & 0x7F;
+                uint8_t lsb = payload[3] & 0x7F;
+
+                guiInterface.sendMixerSend(track, sendIndex, msb, lsb);
+                uint16_t value14bit = (msb << 7) | lsb;
+                Serial.printf("Mixer SEND -> track %u send %u: %u (14bit)\n", track, sendIndex, value14bit);
+                break;
+            }
+
+            case CMD_TRACK_MUTE:
+            case CMD_TRACK_SOLO:
+            case CMD_TRACK_ARM:
+            {
+                // Mute/Solo/Arm use single state byte (2 bytes: track, state)
+                if (payloadLen < 2) {
+                    Serial.println("Live: Mute/Solo/Arm payload too short (need 2 bytes)");
+                    break;
+                }
+                uint8_t track = payload[0] & 0x7F;
+                uint8_t state = payload[1] & 0x7F;
+
+                if (command == CMD_TRACK_MUTE) {
+                    guiInterface.sendMixerMute(track, state);
+                    Serial.printf("Mixer MUTE -> track %u: %s\n", track, state ? "ON" : "OFF");
+                } else if (command == CMD_TRACK_SOLO) {
+                    guiInterface.sendMixerSolo(track, state);
+                    Serial.printf("Mixer SOLO -> track %u: %s\n", track, state ? "ON" : "OFF");
+                } else {
+                    guiInterface.sendMixerArm(track, state);
+                    Serial.printf("Mixer ARM -> track %u: %s\n", track, state ? "ON" : "OFF");
+                }
                 break;
             }
 
@@ -509,22 +545,31 @@ void LiveController::processMIDI() {
                 break;
             }
 
+            // === INFORMATIONAL COMMANDS (silenced to reduce log spam and delay) ===
             case CMD_TRANSPORT_LOOP:
             case CMD_TRANSPORT_METRONOME:
             case CMD_TRANSPORT_SIGNATURE:
             case CMD_TRANSPORT_POSITION:
+            case CMD_TRANSPORT_OVERDUB:  // Also known as CMD_ARRANGEMENT_RECORD
+            case CMD_TRANSPORT_PUNCH:
             case CMD_RECORD_QUANTIZATION:
             case CMD_QUANTIZE_CLIP:
             case CMD_BACK_TO_ARRANGER:
-            case CMD_ARRANGEMENT_RECORD:
-            case CMD_TRANSPORT: {
-                // Reduce log noise for high-frequency transport updates
+            case CMD_RE_ENABLE_AUTOMATION:
+            case CMD_TRANSPORT_QUANTIZE:
+            case CMD_TRANSPORT:
+            case CMD_STEP_SEQUENCER_STATE:
+            case CMD_DEVICE_LIST:
+            case CMD_DEVICE_ENABLE:
+            case CMD_PARAM_VALUE:
+            case CMD_CHAIN_SELECT:
+            case CMD_DRUM_PAD_STATE:
+            case CMD_LOOP_MARKERS:
+            case CMD_CLIP_LOOP:
+            case CMD_CLIP_MUTED: {
+                // Silently process - these are high-frequency or informational commands
                 break;
             }
-
-            case CMD_STEP_SEQUENCER_STATE:
-                // High-frequency; skip logging
-                break;
 
             case CMD_DISCONNECT: {
                 Serial.println("Live: Disconnect command received — clearing state.");
@@ -543,20 +588,7 @@ void LiveController::processMIDI() {
                 Serial.println("Live: secondary handshake ping received");
                 break;
 
-            case 0x48: // Previously unhandled
-            case 0x4B: // Previously unhandled
-            case 0x04: // Previously unhandled
-            {
-                Serial.printf("Live: Received known but unhandled CMD 0x%02X len=%u\n", command, payloadLen);
-                break;
-            }
 
-            case 0x6B: // Previously unhandled
-            {
-                uint8_t value = payloadLen > 0 ? (payload[0] & 0x7F) : 0;
-                Serial.printf("Live: Received known but unhandled CMD 0x%02X value=%u\n", command, value);
-                break;
-            }
 
             default:
                 // Custom vendor messages (F0 7D ...) still go through processSysEx

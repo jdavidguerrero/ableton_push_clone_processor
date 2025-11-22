@@ -91,6 +91,22 @@ void GUIInterface::sendPadColor14bit(int padIndex,
     sendBinary(CMD_LED_PAD_UPDATE_14, payload, sizeof(payload));
 }
 
+void GUIInterface::sendClipState(uint8_t track, uint8_t scene, uint8_t state,
+                                 uint8_t rMsb, uint8_t rLsb,
+                                 uint8_t gMsb, uint8_t gLsb,
+                                 uint8_t bMsb, uint8_t bLsb) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(scene & 0x7F),
+        static_cast<uint8_t>(state & 0x7F),
+        rMsb, rLsb,
+        gMsb, gLsb,
+        bMsb, bLsb
+    };
+    sendBinary(CMD_CLIP_STATE, payload, sizeof(payload));
+}
+
 void GUIInterface::sendClipName(uint8_t track, uint8_t scene, const char* name) {
     if (!io || !name) return;
     size_t len = strnlen(name, 240);
@@ -189,16 +205,88 @@ void GUIInterface::sendUiState(uint8_t panelId, bool state) {
     sendBinary(CMD_LED_UI_STATE, payload, sizeof(payload));
 }
 
+void GUIInterface::sendShiftState(bool pressed) {
+    if (!io) return;
+    uint8_t payload[] = { static_cast<uint8_t>(pressed ? 1 : 0) };
+    sendBinary(CMD_SHIFT_STATE, payload, sizeof(payload));
+}
+
 void GUIInterface::sendSelectedTrack(uint8_t track) {
     if (!io) return;
     uint8_t payload[] = { static_cast<uint8_t>(track & 0x7F) };
     sendBinary(CMD_SELECTED_TRACK, payload, sizeof(payload));
 }
 
+void GUIInterface::sendMixerMode(uint8_t mode) {
+    if (!io) return;
+    uint8_t payload[] = { static_cast<uint8_t>(mode & 0x7F) };
+    sendBinary(CMD_MIXER_MODE, payload, sizeof(payload));
+    Serial.printf("GUI: Mixer mode changed to %d\n", mode);
+}
+
+void GUIInterface::sendMixerVolume(uint8_t track, uint8_t msb, uint8_t lsb) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(msb & 0x7F),
+        static_cast<uint8_t>(lsb & 0x7F)
+    };
+    sendBinary(CMD_MIXER_VOLUME, payload, sizeof(payload));
+}
+
+void GUIInterface::sendMixerPan(uint8_t track, uint8_t msb, uint8_t lsb) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(msb & 0x7F),
+        static_cast<uint8_t>(lsb & 0x7F)
+    };
+    sendBinary(CMD_MIXER_PAN, payload, sizeof(payload));
+}
+
+void GUIInterface::sendMixerSend(uint8_t track, uint8_t sendIndex, uint8_t msb, uint8_t lsb) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(sendIndex & 0x7F),
+        static_cast<uint8_t>(msb & 0x7F),
+        static_cast<uint8_t>(lsb & 0x7F)
+    };
+    sendBinary(CMD_MIXER_SEND, payload, sizeof(payload));
+}
+
+void GUIInterface::sendMixerMute(uint8_t track, uint8_t state) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(state & 0x7F)
+    };
+    sendBinary(CMD_MIXER_MUTE, payload, sizeof(payload));
+}
+
+void GUIInterface::sendMixerSolo(uint8_t track, uint8_t state) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(state & 0x7F)
+    };
+    sendBinary(CMD_MIXER_SOLO, payload, sizeof(payload));
+}
+
+void GUIInterface::sendMixerArm(uint8_t track, uint8_t state) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(track & 0x7F),
+        static_cast<uint8_t>(state & 0x7F)
+    };
+    sendBinary(CMD_MIXER_ARM, payload, sizeof(payload));
+}
+
 void GUIInterface::sendTag(const char* tag) {}
 
 void GUIInterface::printHexPreview(const uint8_t* data, int length, int maxBytes) {}
 
+#ifdef DEBUG_GUI_VERBOSE
 static const char* commandName(uint8_t cmd) {
     switch (cmd) {
         case CMD_HANDSHAKE: return "HANDSHAKE";
@@ -216,6 +304,7 @@ static const char* commandName(uint8_t cmd) {
         default: return "UNKNOWN";
     }
 }
+#endif
 
 void GUIInterface::sendBinary(uint8_t cmd, const uint8_t* payload, uint8_t len) {
     if (!io) return;

@@ -2,10 +2,12 @@
 #include "MidiCommands.h"
 #include "LiveController/LiveController.h"
 #include "NeoTrellisLink/NeoTrellisLink.h"
+#include "GUIInterface/GUIInterface.h"
 
 // Make the global liveController instance available to this file
 extern LiveController liveController;
 extern NeoTrellisLink neoTrellisLink;
+extern GUIInterface guiInterface;
 
 UIBridge::UIBridge() {
     // Constructor
@@ -269,6 +271,14 @@ void UIBridge::handleUARTCommand(uint8_t cmd, uint8_t* payload, uint8_t len) {
                 Serial.println("UIBridge: Grid refresh requested — awaiting Live data");
             } else {
                 Serial.println("UIBridge: Grid refresh request noted");
+            }
+            break;
+        case CMD_UI_SHIFT:
+            if (len >= 1) {
+                bool pressed = (payload[0] != 0);
+                guiInterface.sendShiftState(pressed);
+                Serial.print("UIBridge: Shift state -> ");
+                Serial.println(pressed ? "PRESSED" : "RELEASED");
             }
             break;
         default:

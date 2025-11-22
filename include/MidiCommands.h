@@ -165,6 +165,7 @@
 #define CMD_LED_TRANSPORT_STATE 0x82
 #define CMD_LED_DEVICE_STATE   0x83
 #define CMD_LED_RGB_STATE      0x84
+#define CMD_SHIFT_STATE        0x88
 
 // === ALIAS / COMPATIBILIDAD ===
 #define CMD_PING CMD_PING_TEST
@@ -190,6 +191,9 @@
 #define CMD_PLAY               CMD_TRANSPORT_PLAY
 #define CMD_STOP               CMD_CLIP_STOP
 #define CMD_RECORD             CMD_TRANSPORT_RECORD
+
+// === MIXER MODE CONTROL ===
+#define CMD_MIXER_MODE         0x98  // Mixer parameter mode change (Volume/Pan, Sends, etc.)
 
 // === NAVEGACIÓN DE GRID (para GUI) ===
 #define CMD_GRID_SHIFT_LEFT    0xB0

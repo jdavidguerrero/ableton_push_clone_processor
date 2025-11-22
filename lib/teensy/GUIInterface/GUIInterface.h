@@ -18,6 +18,10 @@ public:
                            uint8_t rMsb, uint8_t rLsb,
                            uint8_t gMsb, uint8_t gLsb,
                            uint8_t bMsb, uint8_t bLsb);
+    void sendClipState(uint8_t track, uint8_t scene, uint8_t state,
+                       uint8_t rMsb, uint8_t rLsb,
+                       uint8_t gMsb, uint8_t gLsb,
+                       uint8_t bMsb, uint8_t bLsb);
     void sendClipName(uint8_t track, uint8_t scene, const char* name);
     void sendTrackName(uint8_t track, const char* name);
     void sendTrackColor(uint8_t track, uint8_t r, uint8_t g, uint8_t b);
@@ -28,7 +32,18 @@ public:
     void sendBPM(float bpm);
     void sendTransportState(bool isPlaying, bool isRecording);
     void sendUiState(uint8_t panelId, bool state);
+    void sendShiftState(bool pressed);
     void sendSelectedTrack(uint8_t track);
+    void sendMixerMode(uint8_t mode);  // Notify GUI of mixer mode change
+
+    // Mixer parameter updates
+    void sendMixerVolume(uint8_t track, uint8_t msb, uint8_t lsb);
+    void sendMixerPan(uint8_t track, uint8_t msb, uint8_t lsb);
+    void sendMixerSend(uint8_t track, uint8_t sendIndex, uint8_t msb, uint8_t lsb);
+    void sendMixerMute(uint8_t track, uint8_t state);
+    void sendMixerSolo(uint8_t track, uint8_t state);
+    void sendMixerArm(uint8_t track, uint8_t state);
+
     bool isConnected() const { return guiConnected; }
 
 private:

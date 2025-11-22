@@ -20,15 +20,18 @@ public:
     // Modificadores
     void setShiftHeld(bool held) { shiftHeld = held; }
 
-    // Callback para cuando un encoder rota
-    void (*onEncoderChange)(uint8_t encoderIndex, int8_t delta);
-
 private:
     Encoder* encoders[NUM_ENCODERS_MAX];
     long oldPositions[NUM_ENCODERS_MAX];
     uint8_t activeEncoders;
     uint8_t currentView;  // 0=Session, 1=Mix, 2=Device, 3=Note
     bool shiftHeld;
+
+public:
+    // Callback para cuando un encoder rota (moved after private members to match initialization order)
+    void (*onEncoderChange)(uint8_t encoderIndex, int8_t delta);
+
+private:
 
     void sendEncoderChange(uint8_t encoderIndex, int8_t delta);
 };

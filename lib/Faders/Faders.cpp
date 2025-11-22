@@ -1,9 +1,10 @@
 #include "Faders.h"
 #include "MidiCommands.h"
+#include "LiveController/LiveController.h"
 #include <Arduino.h>
-#include <MIDI.h>
 
-extern midi::MidiInterface<midi::SerialMIDI<usb_midi_class>> MIDI;
+// Declare liveController as extern (defined in Hardware.cpp)
+extern LiveController liveController;
 
 Faders::Faders()
     : currentBankOffset(0)
@@ -131,7 +132,12 @@ void Faders::read() {
         }
 
         // Ya enganchó o está en tracking normal → Enviar MIDI
-        sendVolumeCommand(pickupStates[i].assignedTrackIndex, value);
+        int trackIndex = pickupStates[i].assignedTrackIndex;
+
+        // ⚠️ IMPORTANTE: Los FADERS siempre controlan VOLUMEN
+        // Solo los ENCODERS cambian su función según paramMode
+        sendVolumeCommand(trackIndex, value);
+
         oldValues[i] = value;
     }
 }
@@ -143,9 +149,19 @@ void Faders::sendVolumeCommand(int trackIndex, int volume) {
         return;
     }
 
-    // Comportamiento por defecto: enviar SysEx
-    byte data[] = {0xF0, CMD_MIXER_VOLUME, (byte)trackIndex, (byte)volume, 0xF7};
-    MIDI.sendSysEx(sizeof(data), data, true);
+    // Convertir 7-bit (0-127) a 14-bit (0-16383) para mayor resolución
+    int value14bit = volume * 129;  // 127 * 129 = 16383
+
+    // Dividir en MSB (bits 7-13) y LSB (bits 0-6)
+    uint8_t valueMsb = (value14bit >> 7) & 0x7F;
+    uint8_t valueLsb = value14bit & 0x7F;
+
+    // Enviar vía LiveController (no usar MIDI.sendSysEx directo)
+    uint8_t payload[] = {(uint8_t)trackIndex, valueMsb, valueLsb};
+    liveController.sendSysExToAbleton(CMD_MIXER_VOLUME, payload, 3);
+
+    Serial.printf("Fader %d → Track %d: vol=%d (14bit=%d, MSB=0x%02X LSB=0x%02X)\n",
+                 trackIndex % NUM_FADERS, trackIndex, volume, value14bit, valueMsb, valueLsb);
 }
 
 void Faders::setParamMode(FaderParamMode mode) {
@@ -167,14 +183,68 @@ void Faders::setParamMode(FaderParamMode mode) {
 }
 
 void Faders::onTrackParamUpdate(int trackIndex, uint8_t paramType, int value) {
-    // TODO: Implementar pickup check para parámetros (Pan, Sends, etc.)
-    // Similar a onTrackVolumeUpdate pero para otros parámetros
-    Serial.printf("Track %d param %d updated: %d\n", trackIndex, paramType, value);
+    // Actualizar target value para pickup check
+    for (int i = 0; i < NUM_FADERS; i++) {
+        if (pickupStates[i].assignedTrackIndex == trackIndex) {
+            pickupStates[i].targetValue = value;
+
+            // Auto-pickup si el fader físico ya está cerca
+            if (!pickupStates[i].hasPickedUp) {
+                int diff = abs(pickupStates[i].physicalValue - value);
+                if (diff <= FADER_PICKUP_THRESHOLD) {
+                    pickupStates[i].hasPickedUp = true;
+
+                    if (onPickupStateChange) {
+                        onPickupStateChange(i, false);
+                    }
+
+                    Serial.printf("AUTO-PICKUP: Fader %d param %d (track %d) diff=%d\n",
+                                 i, paramType, trackIndex, diff);
+                }
+            }
+            break;
+        }
+    }
 }
 
 void Faders::sendParamCommand(int trackIndex, uint8_t paramType, int value) {
-    // TODO: Enviar comando MIDI según paramMode
-    // CMD_MIXER_PAN, CMD_MIXER_SEND, etc.
-    Serial.printf("Sending param command: track=%d type=%d value=%d\n",
-                 trackIndex, paramType, value);
+    // Convertir 7-bit a 14-bit
+    int value14bit = value * 129;
+    uint8_t valueMsb = (value14bit >> 7) & 0x7F;
+    uint8_t valueLsb = value14bit & 0x7F;
+
+    // Determinar comando según paramType
+    uint8_t command = CMD_MIXER_PAN;  // Default
+    uint8_t sendIndex = 0;
+
+    switch (paramType) {
+        case 0: // PAN
+            command = CMD_MIXER_PAN;
+            break;
+        case 1: // SEND A
+        case 2: // SEND B
+        case 3: // SEND C
+        case 4: // SEND D (CUE)
+            command = CMD_MIXER_SEND;
+            sendIndex = paramType - 1;  // 0=A, 1=B, 2=C, 3=D
+            break;
+        default:
+            Serial.printf("Unknown param type: %d\n", paramType);
+            return;
+    }
+
+    // Payload: trackIndex, sendIndex (si aplica), MSB, LSB
+    if (command == CMD_MIXER_SEND) {
+        uint8_t payload[] = {(uint8_t)trackIndex, sendIndex, valueMsb, valueLsb};
+        liveController.sendSysExToAbleton(command, payload, 4);
+
+        Serial.printf("Fader → Track %d Send %c: %d (14bit=%d)\n",
+                     trackIndex, 'A' + sendIndex, value, value14bit);
+    } else {
+        uint8_t payload[] = {(uint8_t)trackIndex, valueMsb, valueLsb};
+        liveController.sendSysExToAbleton(command, payload, 3);
+
+        Serial.printf("Fader → Track %d PAN: %d (14bit=%d)\n",
+                     trackIndex, value, value14bit);
+    }
 }
