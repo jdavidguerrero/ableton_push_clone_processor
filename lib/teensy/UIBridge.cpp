@@ -257,6 +257,12 @@ void UIBridge::handleUARTCommand(uint8_t cmd, uint8_t* payload, uint8_t len) {
                 }
             }
             break;
+        case CMD_TRACK_SELECT:
+            if (len >= 1) {
+                uint8_t track = payload[0] & 0x7F;
+                liveController.sendSysExToAbleton(CMD_TRACK_SELECT, &track, 1);
+            }
+            break;
         case CMD_LED_GRID_UPDATE:
             // Grid refresh request (payload ignored)
             if (!liveController.hasSeenGrid()) {

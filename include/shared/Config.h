@@ -51,11 +51,17 @@
 // === FADERS CONFIGURATION (Teensy only) ===
 #define NUM_FADERS 4
 #define FADER_PINS {A0, A1, A2, A3}  // 4 ALPS B50K faders
+#define TRACKS_PER_BANK 4              // Tracks visible per bank (matches fader count)
+#define FADER_PICKUP_THRESHOLD 3       // ±3 MIDI units for pickup mode (2.4% tolerance)
 
 // === ENCODERS CONFIGURATION (Teensy only) ===
-#define NUM_ENCODERS 4
+#define NUM_ENCODERS_ACTIVE 4          // Currently connected encoders
+#define NUM_ENCODERS_MAX 8             // Maximum encoders supported (future expansion)
 // Format: {Enc1_A, Enc1_B, Enc2_A, Enc2_B, Enc3_A, Enc3_B, Enc4_A, Enc4_B}
-#define ENCODER_PINS {2, 3, 4, 5, 6, 7, 10, 11}
+// CORRECTED: Pin 6-9 (not 6-7)
+#define ENCODER_PINS_ACTIVE {2, 3, 4, 5, 6, 9, 10, 11}
+// Future expansion pins for encoders 5-8 (when added)
+#define ENCODER_PINS_EXPANSION {12, 28, 24, 25, 26, 27, 33, 34}
 
 // === MCP23017 I/O EXPANDER CONFIGURATION (Teensy only) ===
 #define MCP_ENCODER_BUTTONS_ADDR 0x20  // MCP23017 #1: 4 encoder buttons

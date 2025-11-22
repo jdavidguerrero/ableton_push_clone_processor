@@ -180,6 +180,21 @@ void GUIInterface::sendTransportState(bool isPlaying, bool isRecording) {
     sendBinary(CMD_TRANSPORT_RECORD, &rec, 1);
 }
 
+void GUIInterface::sendUiState(uint8_t panelId, bool state) {
+    if (!io) return;
+    uint8_t payload[] = {
+        static_cast<uint8_t>(panelId & 0x7F),
+        static_cast<uint8_t>(state ? 1 : 0)
+    };
+    sendBinary(CMD_LED_UI_STATE, payload, sizeof(payload));
+}
+
+void GUIInterface::sendSelectedTrack(uint8_t track) {
+    if (!io) return;
+    uint8_t payload[] = { static_cast<uint8_t>(track & 0x7F) };
+    sendBinary(CMD_SELECTED_TRACK, payload, sizeof(payload));
+}
+
 void GUIInterface::sendTag(const char* tag) {}
 
 void GUIInterface::printHexPreview(const uint8_t* data, int length, int maxBytes) {}
@@ -208,7 +223,7 @@ void GUIInterface::sendBinary(uint8_t cmd, const uint8_t* payload, uint8_t len) 
     uint16_t written = BinaryProtocol::buildMessage(cmd, payload, len, buffer, sizeof(buffer));
     if (written > 0) {
         io->write(buffer, written);
-        io->flush();
+#ifdef DEBUG_GUI_VERBOSE
         if (cmd != CMD_PING) {
             Serial.print("GUI TX ");
             Serial.print(commandName(cmd));
@@ -223,6 +238,7 @@ void GUIInterface::sendBinary(uint8_t cmd, const uint8_t* payload, uint8_t len) 
             }
             Serial.println();
         }
+#endif
     }
 }
 
@@ -278,6 +294,7 @@ void GUIInterface::processIncoming() {
             uint8_t payloadLen = 0;
             bool valid = BinaryProtocol::parseMessage(rxBuffer, expectedLength, cmd, payload, payloadLen);
             if (valid) {
+                #ifdef DEBUG_GUI_VERBOSE
                 if (cmd != CMD_PING) {
                     Serial.print("GUI RX ");
                     Serial.print(commandName(cmd));
@@ -292,6 +309,7 @@ void GUIInterface::processIncoming() {
                     }
                     Serial.println();
                 }
+                #endif
                 handleIncomingCommand(cmd, const_cast<uint8_t*>(payload), payloadLen);
             }
             rxIndex = 0;

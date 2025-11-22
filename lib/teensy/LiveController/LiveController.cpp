@@ -481,6 +481,9 @@ void LiveController::processMIDI() {
             case CMD_SELECTED_SCENE: {
                 uint8_t value = payloadLen ? (payload[0] & 0x7F) : 0;
                 Serial.printf("Selection CMD 0x%02X -> %u\n", command, value);
+                if (command == CMD_SELECTED_TRACK) {
+                    guiInterface.sendSelectedTrack(value);
+                }
                 break;
             }
 
@@ -503,7 +506,6 @@ void LiveController::processMIDI() {
                 bool isPlaying = (command == CMD_TRANSPORT_PLAY) ? (value > 0) : false;
                 bool isRecording = (command == CMD_TRANSPORT_RECORD) ? (value > 0) : false;
                 guiInterface.sendTransportState(isPlaying, isRecording);
-                Serial.printf("Transport CMD 0x%02X -> value %u (sent to GUI)\n", command, value);
                 break;
             }
 
@@ -516,13 +518,12 @@ void LiveController::processMIDI() {
             case CMD_BACK_TO_ARRANGER:
             case CMD_ARRANGEMENT_RECORD:
             case CMD_TRANSPORT: {
-                uint8_t value = payloadLen ? (payload[0] & 0x7F) : 0;
-                Serial.printf("Transport CMD 0x%02X -> value %u len=%u\n", command, value, payloadLen);
+                // Reduce log noise for high-frequency transport updates
                 break;
             }
 
             case CMD_STEP_SEQUENCER_STATE:
-                Serial.printf("Step sequencer state len=%u\n", payloadLen);
+                // High-frequency; skip logging
                 break;
 
             case CMD_DISCONNECT: {

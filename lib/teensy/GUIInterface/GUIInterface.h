@@ -27,6 +27,8 @@ public:
     void sendSceneTriggered(uint8_t scene, uint8_t flag);
     void sendBPM(float bpm);
     void sendTransportState(bool isPlaying, bool isRecording);
+    void sendUiState(uint8_t panelId, bool state);
+    void sendSelectedTrack(uint8_t track);
     bool isConnected() const { return guiConnected; }
 
 private:
