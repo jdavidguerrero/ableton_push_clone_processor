@@ -430,8 +430,15 @@ void LiveController::processMIDI() {
             case CMD_TRACK_PAN:
             {
                 // Volume and Pan use 14-bit resolution (3 bytes: track, MSB, LSB)
+                Serial.printf("Received CMD 0x%02X: payloadLen=%u\n", command, payloadLen);
+
                 if (payloadLen < 3) {
-                    Serial.println("Live: Volume/Pan payload too short (need 3 bytes)");
+                    Serial.printf("❌ Live: Volume/Pan payload too short! Got %u bytes, need 3. Payload: ",
+                                 payloadLen);
+                    for (uint16_t i = 0; i < payloadLen; i++) {
+                        Serial.printf("0x%02X ", payload[i]);
+                    }
+                    Serial.println();
                     break;
                 }
                 uint8_t track = payload[0] & 0x7F;
@@ -441,11 +448,11 @@ void LiveController::processMIDI() {
                 if (command == CMD_TRACK_VOLUME) {
                     guiInterface.sendMixerVolume(track, msb, lsb);
                     uint16_t value14bit = (msb << 7) | lsb;
-                    Serial.printf("Mixer VOLUME -> track %u: %u (14bit)\n", track, value14bit);
+                    Serial.printf("✅ Mixer VOLUME -> track %u: %u (14bit) → forwarded to GUI\n", track, value14bit);
                 } else {
                     guiInterface.sendMixerPan(track, msb, lsb);
                     uint16_t value14bit = (msb << 7) | lsb;
-                    Serial.printf("Mixer PAN -> track %u: %u (14bit)\n", track, value14bit);
+                    Serial.printf("✅ Mixer PAN -> track %u: %u (14bit) → forwarded to GUI\n", track, value14bit);
                 }
                 break;
             }
@@ -456,8 +463,15 @@ void LiveController::processMIDI() {
 #endif
             {
                 // Sends use 14-bit resolution (4 bytes: track, sendIndex, MSB, LSB)
+                Serial.printf("Received CMD_SEND 0x%02X: payloadLen=%u\n", command, payloadLen);
+
                 if (payloadLen < 4) {
-                    Serial.println("Live: Send payload too short (need 4 bytes)");
+                    Serial.printf("❌ Live: Send payload too short! Got %u bytes, need 4. Payload: ",
+                                 payloadLen);
+                    for (uint16_t i = 0; i < payloadLen; i++) {
+                        Serial.printf("0x%02X ", payload[i]);
+                    }
+                    Serial.println();
                     break;
                 }
                 uint8_t track = payload[0] & 0x7F;
@@ -467,7 +481,8 @@ void LiveController::processMIDI() {
 
                 guiInterface.sendMixerSend(track, sendIndex, msb, lsb);
                 uint16_t value14bit = (msb << 7) | lsb;
-                Serial.printf("Mixer SEND -> track %u send %u: %u (14bit)\n", track, sendIndex, value14bit);
+                Serial.printf("✅ Mixer SEND -> track %u send %u: %u (14bit) → forwarded to GUI\n",
+                             track, sendIndex, value14bit);
                 break;
             }
 
@@ -519,6 +534,9 @@ void LiveController::processMIDI() {
                 Serial.printf("Selection CMD 0x%02X -> %u\n", command, value);
                 if (command == CMD_SELECTED_TRACK) {
                     guiInterface.sendSelectedTrack(value);
+                    // Update selected track for encoder control
+                    extern void setSelectedTrack(int trackIndex);
+                    setSelectedTrack(value);
                 }
                 break;
             }

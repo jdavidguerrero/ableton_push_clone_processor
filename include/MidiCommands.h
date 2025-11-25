@@ -194,6 +194,7 @@
 
 // === MIXER MODE CONTROL ===
 #define CMD_MIXER_MODE         0x98  // Mixer parameter mode change (Volume/Pan, Sends, etc.)
+#define CMD_MIXER_BANK_CHANGE  0x99  // GUI → Teensy: bank change notification for fader pickup
 
 // === NAVEGACIÓN DE GRID (para GUI) ===
 #define CMD_GRID_SHIFT_LEFT    0xB0

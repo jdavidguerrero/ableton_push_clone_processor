@@ -224,6 +224,23 @@ void GUIInterface::sendMixerMode(uint8_t mode) {
     Serial.printf("GUI: Mixer mode changed to %d\n", mode);
 }
 
+void GUIInterface::sendSessionRingPosition(int trackOffset, int sceneOffset, int width, int height) {
+    if (!io) return;
+    uint16_t track = static_cast<uint16_t>(trackOffset);
+    uint16_t scene = static_cast<uint16_t>(sceneOffset);
+    uint8_t payload[7] = {
+        static_cast<uint8_t>((track >> 7) & 0x7F),  // track MSB
+        static_cast<uint8_t>(track & 0x7F),         // track LSB
+        static_cast<uint8_t>((scene >> 7) & 0x7F),  // scene MSB
+        static_cast<uint8_t>(scene & 0x7F),         // scene LSB
+        static_cast<uint8_t>(width & 0x7F),
+        static_cast<uint8_t>(height & 0x7F),
+        0x00  // overview mode placeholder
+    };
+    sendBinary(CMD_RING_POSITION, payload, sizeof(payload));
+    Serial.printf("GUI: Session ring position: T%d S%d (%dx%d)\n", trackOffset, sceneOffset, width, height);
+}
+
 void GUIInterface::sendMixerVolume(uint8_t track, uint8_t msb, uint8_t lsb) {
     if (!io) return;
     uint8_t payload[] = {

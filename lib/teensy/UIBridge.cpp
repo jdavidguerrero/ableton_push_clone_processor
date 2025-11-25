@@ -3,6 +3,7 @@
 #include "LiveController/LiveController.h"
 #include "NeoTrellisLink/NeoTrellisLink.h"
 #include "GUIInterface/GUIInterface.h"
+#include "../../include/teensy/Hardware.h"
 
 // Make the global liveController instance available to this file
 extern LiveController liveController;
@@ -117,10 +118,6 @@ void UIBridge::sendUIStateToM4(uint8_t panelId, bool state) {
 }
 
 void UIBridge::sendSessionRingToGui() {
-    if (!neoTrellisLink.isConnected()) {
-        return;
-    }
-
     uint16_t track = static_cast<uint16_t>(sessionRingTrack);
     uint16_t scene = static_cast<uint16_t>(sessionRingScene);
     uint8_t payload[7] = {
@@ -133,7 +130,14 @@ void UIBridge::sendSessionRingToGui() {
         0x00 // overview placeholder
     };
 
-    neoTrellisLink.sendCommand(CMD_RING_POSITION, payload, sizeof(payload));
+    // Send to NeoTrellis (M4)
+    if (neoTrellisLink.isConnected()) {
+        neoTrellisLink.sendCommand(CMD_RING_POSITION, payload, sizeof(payload));
+    }
+
+    // Send to GUI (Raspberry Pi)
+    guiInterface.sendSessionRingPosition(sessionRingTrack, sessionRingScene,
+                                         sessionRingWidth, sessionRingHeight);
 }
 
 void UIBridge::updateSessionRingInLive() {
@@ -279,6 +283,12 @@ void UIBridge::handleUARTCommand(uint8_t cmd, uint8_t* payload, uint8_t len) {
                 guiInterface.sendShiftState(pressed);
                 Serial.print("UIBridge: Shift state -> ");
                 Serial.println(pressed ? "PRESSED" : "RELEASED");
+            }
+            break;
+        case CMD_MIXER_BANK_CHANGE:
+            if (len >= 1) {
+                int bank = payload[0] & 0x7F;
+                handleMixerBankChangeFromGUI(bank);
             }
             break;
         default:

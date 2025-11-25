@@ -35,6 +35,7 @@ public:
     void sendShiftState(bool pressed);
     void sendSelectedTrack(uint8_t track);
     void sendMixerMode(uint8_t mode);  // Notify GUI of mixer mode change
+    void sendSessionRingPosition(int trackOffset, int sceneOffset, int width, int height);
 
     // Mixer parameter updates
     void sendMixerVolume(uint8_t track, uint8_t msb, uint8_t lsb);

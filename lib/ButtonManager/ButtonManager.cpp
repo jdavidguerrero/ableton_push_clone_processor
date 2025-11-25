@@ -108,10 +108,9 @@ void ButtonManager::readMCP(uint8_t mcpIndex) {
 }
 
 void ButtonManager::handleButtonChange(ButtonID id, bool pressed) {
-    // Actualizar estado de shift
+    // SHIFT button - delegate to callback, which will call setShiftState() if needed
     if (id == ButtonID::SHIFT) {
-        shiftPressed = pressed;
-        Serial.printf("Shift: %s\n", pressed ? "PRESSED" : "RELEASED");
+        Serial.printf("Shift button: %s\n", pressed ? "PRESSED" : "RELEASED");
         if (onShiftChange) {
             onShiftChange(pressed);
         }

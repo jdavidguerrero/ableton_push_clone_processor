@@ -53,6 +53,7 @@ public:
     // Estado de botones
     bool isPressed(ButtonID id);
     bool isShiftHeld() const { return shiftPressed; }
+    void setShiftState(bool state) { shiftPressed = state; }  // For external toggle control
 
     // Callbacks (se deben configurar externamente)
     void (*onEncoderButtonPress)(uint8_t encoderIndex);

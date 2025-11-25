@@ -39,31 +39,70 @@ static int g_encoderValues[4] = {8192, 0, 0, 0}; // Pan centrado, Sends en 0
 void setSelectedTrack(int trackIndex) {
     if (g_selectedTrack != trackIndex) {
         g_selectedTrack = trackIndex;
-        Serial.printf("🎯 Selected track changed: %d\n", g_selectedTrack);
-        // TODO: Actualizar encoderValues con valores reales del track
+        Serial.printf("🎯 Selected track changed: Track %d\n", g_selectedTrack);
+
+        // Reset encoder values to neutral when changing tracks
+        // This prevents sending old values from previous track
+        g_encoderValues[0] = 8192;  // Pan center (50%)
+        g_encoderValues[1] = 0;     // Send A off
+        g_encoderValues[2] = 0;     // Send B off
+        g_encoderValues[3] = 0;     // Send C off
+
+        Serial.println("   ↳ Encoder values reset to neutral");
     }
+}
+
+// Función para manejar cambios de banco desde la GUI
+void handleMixerBankChangeFromGUI(int bank) {
+    // GUI envía número de banco (0, 1, 2...), necesitamos convertir a track offset
+    int trackOffset = bank * 4;  // 4 tracks per bank
+    Serial.printf("📤 Mixer bank change received from GUI: bank %d → track offset %d (tracks %d-%d)\n",
+                  bank, trackOffset, trackOffset, trackOffset + 3);
+    faders.setTrackBank(trackOffset);
 }
 
 namespace {
 constexpr uint8_t SHIFT_UI_PANEL = 0x0F;
 
+// Shift state tracking
+static bool g_shiftHeld = false;
+
 // Forward declarations
 void handleMixerModeChange();
 
 void handleEncoderButtonPress(uint8_t encoderIndex) {
-    // Map encoder 0-3 to scene 0-3
+    // Called when encoder buttons are pressed WITHOUT shift
+    // (When shift is active, ButtonManager calls handleNavigationPress instead)
+    // Fire scenes (original behavior)
     uint8_t scene = encoderIndex;
     if (scene < GRID_SCENES) {
         liveController.sendSysExToAbleton(CMD_SCENE_FIRE, &scene, 1);
+        Serial.printf("🎬 Fire Scene %d (Encoder %d)\n", scene, encoderIndex);
     }
 }
 
 void handleNavigationPress(uint8_t direction) {
+    // Called from encoder buttons when SHIFT is active
+    // Direction mapping: 0=UP(Enc0), 1=DOWN(Enc1), 2=LEFT(Enc2), 3=RIGHT(Enc3)
     switch (direction) {
-        case 0: uiBridge.shiftSessionRing(0, -1); break; // Up
-        case 1: uiBridge.shiftSessionRing(0, 1);  break; // Down
-        case 2: uiBridge.shiftSessionRing(-1, 0); break; // Left
-        case 3: uiBridge.shiftSessionRing(1, 0);  break; // Right
+        case 0:  // UP = Encoder 0 = Previous track (LEFT in session ring)
+            uiBridge.shiftSessionRing(-1, 0);
+            Serial.println("🎯 Navigate: Previous Track (Encoder 0)");
+            break;
+        case 1:  // DOWN = Encoder 1 = Next track (RIGHT in session ring)
+            uiBridge.shiftSessionRing(1, 0);
+            Serial.println("🎯 Navigate: Next Track (Encoder 1)");
+            break;
+        case 2:  // LEFT = Encoder 2 = Previous scene (UP in session ring)
+            uiBridge.shiftSessionRing(0, -1);
+            Serial.println("🎯 Navigate: Previous Scene (Encoder 2)");
+            break;
+        case 3:  // RIGHT = Encoder 3 = Next scene (DOWN in session ring)
+            uiBridge.shiftSessionRing(0, 1);
+            Serial.println("🎯 Navigate: Next Scene (Encoder 3)");
+            break;
+        default:
+            break;
     }
 }
 
@@ -83,15 +122,24 @@ void handleTransportPress(ButtonID id) {
 }
 
 void handleBankChange(int8_t direction) {
-    // Move ring horizontally in groups of 4 tracks
-    int deltaTracks = direction * GRID_TRACKS;
-    uiBridge.shiftSessionRing(deltaTracks, 0);
+    // DISABLED: User wants no bank navigation (8 tracks at a time)
+    (void)direction;  // Suppress unused parameter warning
 }
 
 void handleShiftChange(bool pressed) {
-    encoders.setShiftHeld(pressed);
-    guiInterface.sendUiState(SHIFT_UI_PANEL, pressed);
-    guiInterface.sendShiftState(pressed);
+    // SHIFT is now a TOGGLE (not hold) - only toggle on button press
+    if (pressed) {
+        g_shiftHeld = !g_shiftHeld;  // Toggle state
+        Serial.printf("🔄 SHIFT toggled: %s\n", g_shiftHeld ? "ON" : "OFF");
+
+        // Sync ButtonManager state so encoder navigation works
+        buttonManager.setShiftState(g_shiftHeld);
+
+        encoders.setShiftHeld(g_shiftHeld);
+        guiInterface.sendUiState(SHIFT_UI_PANEL, g_shiftHeld);
+        guiInterface.sendShiftState(g_shiftHeld);
+    }
+    // Ignore release events for toggle mode
 }
 
 void handleMixerModeChange() {
@@ -180,13 +228,6 @@ void setupHardware() {
             Serial.printf("Encoder %d → Track %d %s: %d (14bit)\n",
                          encoderIndex, g_selectedTrack, sendNames[sendIndex], g_encoderValues[encoderIndex]);
         }
-    };
-
-    
-    // Conectar modificador Shift a Encoders
-    buttonManager.onShiftChange = [](bool pressed) {
-        encoders.setShiftHeld(pressed);
-        guiInterface.sendUiState(SHIFT_UI_PANEL, pressed);
     };
 }
 

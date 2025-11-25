@@ -24,11 +24,19 @@ Faders::Faders()
 }
 
 void Faders::begin() {
+    // Configure ADC resolution (Teensy 4.1 supports up to 12-bit)
+    analogReadResolution(12);  // 0-4095
+    analogReadAveraging(4);    // Average 4 samples for noise reduction
+
     int pins[] = FADER_PINS;
     for (int i = 0; i < NUM_FADERS; i++) {
         pinMode(pins[i], INPUT);
         oldValues[i] = -1;
-        Serial.printf("Fader %d initialized (pin A%d)\n", i + 1, pins[i] - A0);
+
+        // Read initial value to check range
+        int testRead = analogRead(pins[i]);
+        Serial.printf("Fader %d initialized (pin A%d) - ADC test: %d/4095\n",
+                     i + 1, pins[i] - A0, testRead);
     }
 
     Serial.printf("Faders initialized: %d faders in bank %d (tracks %d-%d)\n",
@@ -89,10 +97,30 @@ void Faders::onTrackVolumeUpdate(int trackIndex, int volume) {
 
 void Faders::read() {
     int pins[] = FADER_PINS;
+    static unsigned long lastRangeCheck = 0;
+    static int maxRawValues[NUM_FADERS] = {0};  // Track max values seen
 
     for (int i = 0; i < NUM_FADERS; i++) {
         // Leer ADC 12-bit y convertir a 7-bit MIDI (0-127)
         int rawValue = analogRead(pins[i]);
+
+        // Track maximum value seen (for diagnostic)
+        if (rawValue > maxRawValues[i]) {
+            maxRawValues[i] = rawValue;
+        }
+
+        // Print range diagnostic every 5 seconds
+        if (millis() - lastRangeCheck > 5000) {
+            if (i == 0) {  // Only print once per cycle
+                for (int j = 0; j < NUM_FADERS; j++) {
+                    Serial.printf("Fader %d max ADC seen: %d/4095 (%.1f%%)\n",
+                                 j, maxRawValues[j],
+                                 (maxRawValues[j] * 100.0f) / 4095.0f);
+                }
+                lastRangeCheck = millis();
+            }
+        }
+
         int value = rawValue >> 5;  // Divide por 32 (4096/128 ≈ 32)
 
         // Tolerancia para evitar ruido
