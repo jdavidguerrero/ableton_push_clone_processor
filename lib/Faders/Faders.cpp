@@ -99,6 +99,7 @@ void Faders::read() {
     int pins[] = FADER_PINS;
     static unsigned long lastRangeCheck = 0;
     static int maxRawValues[NUM_FADERS] = {0};  // Track max values seen
+    static unsigned long lastPickupLog[NUM_FADERS] = {0};  // Rate limit pickup logs
 
     for (int i = 0; i < NUM_FADERS; i++) {
         // Leer ADC 12-bit y convertir a 7-bit MIDI (0-127)
@@ -149,10 +150,11 @@ void Faders::read() {
                 // ❌ AÚN NO - Solo actualizar oldValues, NO enviar MIDI
                 oldValues[i] = value;
 
-                // Opcional: log para debug
-                if (diff > 10) {  // Solo log si la diferencia es grande
+                // Opcional: log para debug (RATE LIMITED para evitar buffer overflow)
+                if (diff > 10 && (millis() - lastPickupLog[i]) > 500) {
                     Serial.printf("Fader %d waiting pickup: phys=%d target=%d (diff=%d)\n",
                                  i, value, pickupStates[i].targetValue, diff);
+                    lastPickupLog[i] = millis();
                 }
 
                 continue;  // CRITICAL: Skip MIDI send

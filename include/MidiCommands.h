@@ -196,6 +196,10 @@
 #define CMD_MIXER_MODE         0x98  // Mixer parameter mode change (Volume/Pan, Sends, etc.)
 #define CMD_MIXER_BANK_CHANGE  0x99  // GUI → Teensy: bank change notification for fader pickup
 
+// === BULK SESSION RING COMMANDS ===
+#define CMD_SESSION_RING_METADATA 0x9A  // Bulk session ring metadata (tracks/scenes names+colors) (Live → Hardware)
+#define CMD_SESSION_RING_CLIPS    0x9B  // Bulk session ring clips (32 clips states+colors) (Live → Hardware)
+
 // === NAVEGACIÓN DE GRID (para GUI) ===
 #define CMD_GRID_SHIFT_LEFT    0xB0
 #define CMD_GRID_SHIFT_RIGHT   0xB1

@@ -131,7 +131,12 @@ void LiveController::processMIDI() {
         uint16_t payloadLen = 0;
         const uint8_t* payload = nullptr;
         if (!parseLiveSysExFrame(sysexData, length, command, sequence, payloadLen, payload)) {
-            Serial.println("Teensy: Ignoring malformed Live SysEx frame (length/checksum mismatch)");
+            Serial.printf("Teensy: Ignoring malformed Live SysEx frame (length=%u bytes, expected format F0 7F 00 7F CMD SEQ LEN... F7)\n", length);
+            Serial.print("  First 16 bytes: ");
+            for (int i = 0; i < min(length, 16); i++) {
+                Serial.printf("%02X ", sysexData[i]);
+            }
+            Serial.println();
             continue;
         }
 
@@ -141,6 +146,11 @@ void LiveController::processMIDI() {
         Serial.print(" PAYLOAD:");
         Serial.println(payloadLen);
         #endif
+
+        // Always log bulk commands for debugging
+        if (command == CMD_SESSION_RING_METADATA || command == CMD_SESSION_RING_CLIPS) {
+            Serial.printf("Teensy: Received Live CMD 0x%02X (payload %u bytes)\n", command, payloadLen);
+        }
 
         switch (command) {
             case CMD_GRID_UPDATE: {
@@ -606,7 +616,157 @@ void LiveController::processMIDI() {
                 Serial.println("Live: secondary handshake ping received");
                 break;
 
+            case CMD_SESSION_RING_METADATA: {
+                // Bulk metadata: tracks and scenes with names and colors
+                // Format: [num_tracks] [track0: len, name..., R, G, B] ... [track7: ...]
+                //         [num_scenes] [scene0: len, name..., R, G, B] ... [scene3: ...]
+                uint16_t offset = 0;
 
+                if (payloadLen < 1) {
+                    Serial.println("Live: Ring metadata bulk payload too short");
+                    break;
+                }
+
+                // Parse tracks
+                uint8_t numTracks = payload[offset++] & 0x7F;
+                Serial.printf("📦 Ring metadata bulk: %u tracks\n", numTracks);
+
+                for (uint8_t t = 0; t < numTracks && offset < payloadLen; t++) {
+                    if (offset >= payloadLen) break;
+
+                    uint8_t nameLen = payload[offset++] & 0x7F;
+                    if (offset + nameLen + 3 > payloadLen) break;  // name + RGB
+
+                    char trackName[64] = {0};
+                    for (uint8_t i = 0; i < nameLen && i < 63; i++) {
+                        trackName[i] = static_cast<char>(payload[offset++] & 0x7F);
+                    }
+                    trackName[nameLen] = '\0';
+
+                    uint8_t r7 = payload[offset++] & 0x7F;
+                    uint8_t g7 = payload[offset++] & 0x7F;
+                    uint8_t b7 = payload[offset++] & 0x7F;
+
+                    // Convert 7-bit to 8-bit
+                    uint8_t r8 = r7 << 1;
+                    uint8_t g8 = g7 << 1;
+                    uint8_t b8 = b7 << 1;
+
+                    guiInterface.sendTrackName(t, trackName);
+                    guiInterface.sendTrackColor(t, r8, g8, b8);
+
+                    if (t < GRID_TRACKS) {
+                        size_t copyLen = strlen(trackName);
+                        if (copyLen > MAX_TRACK_NAME_LEN - 1) {
+                            copyLen = MAX_TRACK_NAME_LEN - 1;
+                        }
+                        memcpy(trackNameCache[t], trackName, copyLen);
+                        trackNameCache[t][copyLen] = '\0';
+                        trackNameValid[t] = true;
+                    }
+                }
+
+                // Parse scenes
+                if (offset < payloadLen) {
+                    uint8_t numScenes = payload[offset++] & 0x7F;
+                    Serial.printf("📦 Ring metadata bulk: %u scenes\n", numScenes);
+
+                    for (uint8_t s = 0; s < numScenes && offset < payloadLen; s++) {
+                        if (offset >= payloadLen) break;
+
+                        uint8_t nameLen = payload[offset++] & 0x7F;
+                        if (offset + nameLen + 3 > payloadLen) break;
+
+                        char sceneName[64] = {0};
+                        for (uint8_t i = 0; i < nameLen && i < 63; i++) {
+                            sceneName[i] = static_cast<char>(payload[offset++] & 0x7F);
+                        }
+                        sceneName[nameLen] = '\0';
+
+                        uint8_t r7 = payload[offset++] & 0x7F;
+                        uint8_t g7 = payload[offset++] & 0x7F;
+                        uint8_t b7 = payload[offset++] & 0x7F;
+
+                        // Convert 7-bit to 8-bit
+                        uint8_t r8 = r7 << 1;
+                        uint8_t g8 = g7 << 1;
+                        uint8_t b8 = b7 << 1;
+
+                        guiInterface.sendSceneName(s, sceneName);
+                        guiInterface.sendSceneColor(s, r8, g8, b8);
+                    }
+                }
+
+                Serial.printf("✅ Processed ring metadata bulk (%u bytes)\n", payloadLen);
+                break;
+            }
+
+            case CMD_SESSION_RING_CLIPS: {
+                // Bulk clips: 32 clips with states and colors
+                // Format: [clip0: state, R, G, B] [clip1: ...] ... [clip31: ...]
+                // Order: column-major (track 0 scenes 0-3, track 1 scenes 0-3, ...)
+
+                const uint8_t expectedBytes = 32 * 4;  // 32 clips × 4 bytes each
+                if (payloadLen < expectedBytes) {
+                    Serial.printf("Live: Ring clips bulk payload too short (got %u, need %u)\n",
+                                 payloadLen, expectedBytes);
+                    break;
+                }
+
+                Serial.printf("📦 Ring clips bulk: 32 clips\n");
+
+                uint16_t offset = 0;
+                for (uint8_t track = 0; track < GRID_TRACKS; track++) {
+                    for (uint8_t scene = 0; scene < GRID_SCENES; scene++) {
+                        if (offset + 3 >= payloadLen) break;
+
+                        uint8_t state = payload[offset++] & 0x7F;
+                        uint8_t r7 = payload[offset++] & 0x7F;
+                        uint8_t g7 = payload[offset++] & 0x7F;
+                        uint8_t b7 = payload[offset++] & 0x7F;
+
+                        // Convert 7-bit to 8-bit for RGB
+                        uint8_t r8 = r7 << 1;
+                        uint8_t g8 = g7 << 1;
+                        uint8_t b8 = b7 << 1;
+
+                        // Send to NeoTrellis
+                        int padIndex = scene * GRID_TRACKS + track;
+                        if (padIndex >= 0 && padIndex < TOTAL_KEYS) {
+                            uint8_t m4Data[] = {
+                                static_cast<uint8_t>(padIndex),
+                                r8, g8, b8
+                            };
+                            neoTrellisLink.sendCommand(CMD_LED_PAD_UPDATE, m4Data, sizeof(m4Data));
+
+                            uint8_t statePayload[] = { static_cast<uint8_t>(padIndex), state };
+                            neoTrellisLink.sendCommand(CMD_LED_CLIP_STATE, statePayload, sizeof(statePayload));
+                        }
+
+                        // Send to GUI (convert to 14-bit for full fidelity)
+                        uint16_t r14 = r8 << 1;
+                        uint16_t g14 = g8 << 1;
+                        uint16_t b14 = b8 << 1;
+                        guiInterface.sendClipState(track, scene, state,
+                                                   (r14 >> 7) & 0x7F, r14 & 0x7F,
+                                                   (g14 >> 7) & 0x7F, g14 & 0x7F,
+                                                   (b14 >> 7) & 0x7F, b14 & 0x7F);
+                    }
+                }
+
+                Serial.printf("✅ Processed ring clips bulk (%u clips)\n", 32);
+
+                // Mark grid as seen and enable keys (like CMD_GRID_UPDATE does)
+                if (!gridSeen) {
+                    gridSeen = true;
+                    Serial.println("Teensy: First grid seen (bulk clips) — enabling key scanning on M4");
+                    neoTrellisLink.sendCommand(CMD_ENABLE_KEYS, nullptr, 0);
+                }
+
+                // Resend cached names to ensure GUI is in sync
+                broadcastCachedNamesToGUI();
+                break;
+            }
 
             default:
                 // Custom vendor messages (F0 7D ...) still go through processSysEx
